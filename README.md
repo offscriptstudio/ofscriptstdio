@@ -47,6 +47,13 @@ Preview production build:
 npm run preview
 ```
 
+again push
+```bash
+git add .
+git commit -m "form fix"
+git push origin main
+```
+
 ## 🧰 Tech Stack
 
 - **Framework**: React 18
