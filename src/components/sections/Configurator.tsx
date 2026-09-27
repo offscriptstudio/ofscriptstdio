@@ -89,7 +89,8 @@ export default function Configurator() {
     setSubmissionMessage('');
 
     try {
-      const accessKey = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY || 'eccfceac-875f-4d7a-8d3a-8e995893bc58';
+      const envKey = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY;
+      const accessKey = (envKey && envKey.trim().length > 0) ? envKey.trim() : 'eccfceac-875f-4d7a-8d3a-8e995893bc58';
 
       const emailSubject = `🚀 NEW PROJECT BRIEF: ${config.business.name || config.contact.name || 'Offscript Studio Client'}`;
 
