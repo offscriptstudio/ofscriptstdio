@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ArrowLeft, Check, Sparkles } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Check, Sparkles, Edit3, CheckSquare, Square } from 'lucide-react';
 import { initialConfig, type ProjectConfig } from './configurator/estimate';
 import SummaryCard from './configurator/SummaryCard';
 
@@ -24,15 +23,7 @@ const featureOptions = [
   'AI features', 'Animations', '3D experience', 'Other',
 ];
 
-const growthOptions = [
-  'Instagram management', 'Content creation', 'Reels', 'Static posts',
-  'Paid advertising', 'Meta Ads', 'Google Ads', 'SEO', 'Email marketing',
-  'Analytics', 'Conversion optimization', 'Not sure',
-];
-
-const experienceOptions = ['Simple and focused', 'Premium and polished', 'Highly interactive', 'Experimental', 'Let us recommend'];
 const timelineOptions = ['ASAP', '2 to 4 weeks', '1 to 2 months', 'Flexible'];
-const budgetOptions = ['Starter budget', 'Balanced budget', 'Premium budget', 'Flexible', 'Not sure yet'];
 
 const stepLabels = [
   'What are you looking for?',
@@ -41,15 +32,18 @@ const stepLabels = [
   'What do you need included?',
   'When do you need it?',
   'Contact details',
+  'Preview & Confirm',
 ];
 
 export default function Configurator() {
   const [step, setStep] = useState(0);
   const [config, setConfig] = useState<ProjectConfig>(initialConfig);
-  const [submitted, setSubmitted] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submissionMessage, setSubmissionMessage] = useState('');
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const toggle = (key: keyof ProjectConfig, value: string) => {
     setConfig((prev) => {
@@ -62,7 +56,6 @@ export default function Configurator() {
   };
 
   const toggleFeatures = (value: string) => toggle('features', value);
-  const toggleGrowth = (value: string) => toggle('growth', value);
   const toggleGoals = (value: string) => toggle('goals', value);
   const toggleTypes = (value: string) => toggle('projectTypes', value);
 
@@ -76,64 +69,96 @@ export default function Configurator() {
     return true;
   };
 
-  const back = () => step > 0 && setStep(step - 1);
+  const back = () => {
+    if (isPreviewMode) {
+      setIsPreviewMode(false);
+      setStep(5);
+    } else if (step > 0) {
+      setStep(step - 1);
+    }
+  };
+
+  const jumpToStep = (targetStep: number) => {
+    setIsPreviewMode(false);
+    setStep(targetStep);
+  };
 
   const submitBrief = async () => {
-    if (isSubmitting || hasSubmitted) return;
+    if (!isConfirmed || isSubmitting || hasSubmitted) return;
     setIsSubmitting(true);
     setSubmissionMessage('');
 
     try {
+      const accessKey = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY || 'eccfceac-875f-4d7a-8d3a-8e995893bc58';
+
       const projectSummary = [
+        `Target Email: info.offscriptstudio@gmail.com`,
         `Project Type: ${config.projectTypes.join(', ') || 'Not specified'}`,
-        `Business: ${config.business.name || 'Not specified'}`,
+        `Business Name: ${config.business.name || 'Not specified'}`,
         `Industry: ${config.business.industry || 'Not specified'}`,
-        `Website: ${config.business.website || 'Not specified'}`,
+        `Website URL: ${config.business.website || 'Not specified'}`,
         `Location: ${config.business.location || 'Not specified'}`,
-        `Audience: ${config.business.audience || 'Not specified'}`,
+        `Target Audience: ${config.business.audience || 'Not specified'}`,
         `Description: ${config.business.description || 'Not specified'}`,
-        `Primary Goal: ${config.goals.join(', ') || 'Not specified'}`,
-        `Features: ${config.features.join(', ') || 'Not specified'}`,
-        `Growth: ${config.growth.join(', ') || 'Not specified'}`,
-        `Experience: ${config.experience || 'Not specified'}`,
+        `Primary Goals: ${config.goals.join(', ') || 'Not specified'}`,
+        `Features Needed: ${config.features.join(', ') || 'None'}`,
         `Timeline: ${config.timeline || 'Not specified'}`,
-        `Budget: ${config.budget || 'Not specified'}`,
+        `Contact Name: ${config.contact.name || 'Not specified'}`,
+        `Contact Email: ${config.contact.email || 'Not specified'}`,
+        `Contact Phone: ${config.contact.phone || 'Not specified'}`,
+        `Company: ${config.contact.company || 'Not specified'}`,
       ].join('\n');
 
       const formData = new FormData();
-      formData.append('access_key', 'eccfceac-875f-4d7a-8d3a-8e995893bc58');
-      formData.append('name', config.contact.name || 'New lead');
-      formData.append('email', config.contact.email || '');
+      formData.append('access_key', accessKey);
+      formData.append('name', config.contact.name || 'New Lead');
+      formData.append('email', config.contact.email || 'info.offscriptstudio@gmail.com');
       formData.append('phone', config.contact.phone || '');
       formData.append('company', config.contact.company || '');
-      formData.append('subject', 'Offscript Studio Project Brief');
-      formData.append('message', `New project inquiry from Offscript Studio website.\n\n${projectSummary}`);
+      formData.append('subject', `New Project Brief - ${config.business.name || config.contact.name}`);
+      formData.append('message', `New project inquiry received for Offscript Studio:\n\n${projectSummary}`);
+      formData.append('from_name', 'Offscript Studio Brief Form');
 
       const response = await fetch('https://api.web3forms.com/submit', {
         method: 'POST',
+        headers: {
+          'Accept': 'application/json'
+        },
         body: formData,
       });
 
-      const result = await response.json();
+      const text = await response.text();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (err) {
+        console.error('Non-JSON response from Web3Forms:', text);
+        result = { success: false, message: 'Server returned HTML response instead of JSON.' };
+      }
 
       if (response.ok && result.success) {
         setHasSubmitted(true);
-        setSubmissionMessage('Your brief has been submitted successfully. We will contact you shortly.');
+        setSubmitSuccess(true);
+        setSubmissionMessage('Your brief has been sent successfully to info.offscriptstudio@gmail.com! We will get back to you shortly.');
       } else {
-        setSubmissionMessage('There was a problem submitting your brief. Please email info.offscriptstudio@gmail.com directly.');
+        console.error('Web3Forms submit error:', result);
+        setSubmitSuccess(false);
+        setSubmissionMessage(result.message || 'There was a problem submitting your brief via Web3Forms. Please check your Access Key in .env or contact info.offscriptstudio@gmail.com directly.');
       }
     } catch (error) {
-      setSubmissionMessage('There was a problem submitting your brief. Please email info.offscriptstudio@gmail.com directly.');
+      console.error('Submission catch error:', error);
+      setSubmitSuccess(false);
+      setSubmissionMessage('Network error occurred while submitting your brief. Please check your connection or contact info.offscriptstudio@gmail.com directly.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const next = () => {
-    if (step < 5) setStep(step + 1);
-    else {
-      setSubmitted(true);
-      void submitBrief();
+    if (step < 5) {
+      setStep(step + 1);
+    } else {
+      setIsPreviewMode(true);
     }
   };
 
@@ -150,98 +175,231 @@ export default function Configurator() {
           </p>
         </div>
 
-        <AnimatePresence mode="wait">
-          {submitted ? (
-            <FinalSummary
-              config={config}
-              isSubmitting={isSubmitting}
-              hasSubmitted={hasSubmitted}
-              submissionMessage={submissionMessage}
-              onSubmit={submitBrief}
-              onReset={() => { setSubmitted(false); setStep(0); setConfig(initialConfig); setHasSubmitted(false); setSubmissionMessage(''); }}
-            />
-          ) : (
-            <motion.div
-              key="configurator"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="grid gap-8 lg:grid-cols-[1fr_320px]"
-            >
-              <div className="rounded-3xl border border-ink-800 bg-ink-900/30 p-6 sm:p-10">
-                {/* Progress bar */}
-                <div className="mb-8">
-                  <div className="flex items-center justify-between text-xs text-ink-500">
-                    <span className="font-mono">Step {step + 1} / 6</span>
-                    <span>{stepLabels[step]}</span>
-                  </div>
-                  <div className="mt-3 h-px w-full overflow-hidden rounded-full bg-ink-800">
-                    <motion.div
-                      className="h-full bg-accent-400"
-                      animate={{ width: `${((step + 1) / 6) * 100}%` }}
-                      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+          <div className="rounded-3xl border border-ink-800 bg-ink-900/30 p-6 sm:p-10">
+            {/* Progress bar */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between text-xs text-ink-500">
+                <span className="font-mono">
+                  {isPreviewMode ? 'Step 7 / 7' : `Step ${step + 1} / 6`}
+                </span>
+                <span>{isPreviewMode ? stepLabels[6] : stepLabels[step]}</span>
+              </div>
+              <div className="mt-3 h-px w-full overflow-hidden rounded-full bg-ink-800">
+                <motion.div
+                  className="h-full bg-accent-400"
+                  animate={{ width: isPreviewMode ? '100%' : `${((step + 1) / 6) * 100}%` }}
+                  transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                />
+              </div>
+            </div>
+
+            <AnimatePresence mode="wait">
+              {isPreviewMode ? (
+                <motion.div
+                  key="preview"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <h3 className="text-xl font-semibold text-ink-50 mb-2">Preview Your Information</h3>
+                  <p className="text-sm text-ink-400 mb-6">
+                    Please review your details below. You can edit any section before confirming and submitting.
+                  </p>
+
+                  <div className="space-y-4 mb-8">
+                    <PreviewSection
+                      title="1. Looking For (Project Type)"
+                      content={config.projectTypes.join(', ') || 'Not specified'}
+                      onEdit={() => jumpToStep(0)}
+                    />
+                    <PreviewSection
+                      title="2. Business Details"
+                      content={
+                        <div>
+                          <p><strong>Name:</strong> {config.business.name || '-'}</p>
+                          <p><strong>Industry:</strong> {config.business.industry || '-'}</p>
+                          {config.business.website && <p><strong>Website:</strong> {config.business.website}</p>}
+                          {config.business.location && <p><strong>Location:</strong> {config.business.location}</p>}
+                          {config.business.audience && <p><strong>Audience:</strong> {config.business.audience}</p>}
+                          {config.business.description && <p><strong>Description:</strong> {config.business.description}</p>}
+                        </div>
+                      }
+                      onEdit={() => jumpToStep(1)}
+                    />
+                    <PreviewSection
+                      title="3. Main Goal"
+                      content={config.goals.join(', ') || 'Not specified'}
+                      onEdit={() => jumpToStep(2)}
+                    />
+                    <PreviewSection
+                      title="4. Included Features"
+                      content={config.features.length > 0 ? config.features.join(', ') : 'None selected'}
+                      onEdit={() => jumpToStep(3)}
+                    />
+                    <PreviewSection
+                      title="5. Timeline"
+                      content={config.timeline || 'Not specified'}
+                      onEdit={() => jumpToStep(4)}
+                    />
+                    <PreviewSection
+                      title="6. Contact Details"
+                      content={
+                        <div>
+                          <p><strong>Name:</strong> {config.contact.name || '-'}</p>
+                          <p><strong>Email:</strong> {config.contact.email || '-'}</p>
+                          {config.contact.phone && <p><strong>Phone:</strong> {config.contact.phone}</p>}
+                          {config.contact.company && <p><strong>Company:</strong> {config.contact.company}</p>}
+                        </div>
+                      }
+                      onEdit={() => jumpToStep(5)}
                     />
                   </div>
-                </div>
 
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={step}
-                    initial={{ opacity: 0, x: 30 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -30 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {step === 0 && (
-                      <StepGrid options={projectTypeOptions} selected={config.projectTypes} onToggle={toggleTypes} multi />
-                    )}
-                    {step === 1 && (
-                      <BusinessForm config={config} setConfig={setConfig} />
-                    )}
-                    {step === 2 && (
-                      <StepGrid options={goalOptions} selected={config.goals} onToggle={toggleGoals} multi />
-                    )}
-                    {step === 3 && (
-                      <>
-                        <p className="mb-6 text-sm text-ink-400">Select everything you think you might need.</p>
-                        <StepGrid options={featureOptions} selected={config.features} onToggle={toggleFeatures} multi />
-                      </>
-                    )}
-                    {step === 4 && (
-                      <StepGrid options={timelineOptions} selected={config.timeline ? [config.timeline] : []} onToggle={(v) => setConfig({ ...config, timeline: v })} />
-                    )}
-                    {step === 5 && (
-                      <ContactForm config={config} setConfig={setConfig} />
-                    )}
-                  </motion.div>
-                </AnimatePresence>
+                  {hasSubmitted && submitSuccess ? (
+                    <div className="rounded-2xl border border-green-500/30 bg-green-500/10 p-6 text-center">
+                      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-green-500 text-ink-950">
+                        <Check size={24} />
+                      </div>
+                      <h4 className="text-lg font-semibold text-green-400">Brief Submitted!</h4>
+                      <p className="mt-2 text-sm text-ink-200">{submissionMessage}</p>
+                      <button
+                        onClick={() => {
+                          setHasSubmitted(false);
+                          setIsPreviewMode(false);
+                          setStep(0);
+                          setConfig(initialConfig);
+                          setIsConfirmed(false);
+                          setSubmissionMessage('');
+                        }}
+                        className="mt-6 rounded-full border border-ink-700 px-6 py-2.5 text-sm text-ink-300 hover:text-ink-50 transition-colors"
+                      >
+                        Submit Another Idea
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Confirmation Checkbox */}
+                      <div className="mb-6">
+                        <button
+                          type="button"
+                          onClick={() => setIsConfirmed(!isConfirmed)}
+                          className="flex items-start gap-3 text-left group"
+                        >
+                          <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
+                            isConfirmed ? 'border-accent-400 bg-accent-400 text-ink-950' : 'border-ink-600 bg-ink-900/50 group-hover:border-ink-400'
+                          }`}>
+                            {isConfirmed ? <CheckSquare size={14} /> : <Square size={14} className="text-transparent" />}
+                          </span>
+                          <span className="text-sm text-ink-200">
+                            I confirm that all details provided above are accurate and ready for submission to <strong>info.offscriptstudio@gmail.com</strong>.
+                          </span>
+                        </button>
+                      </div>
 
-                {/* Nav buttons */}
-                <div className="mt-10 flex items-center justify-between">
-                  <button
-                    onClick={back}
-                    disabled={step === 0}
-                    className="flex items-center gap-2 rounded-full border border-ink-700 px-5 py-2.5 text-sm text-ink-300 transition-colors hover:border-ink-500 hover:text-ink-50 disabled:opacity-30 disabled:hover:border-ink-700 disabled:hover:text-ink-300"
-                  >
-                    <ArrowLeft size={16} /> Back
-                  </button>
-                  <button
-                    onClick={next}
-                    disabled={!canProceed()}
-                    className="group flex items-center gap-2 rounded-full bg-accent-400 px-6 py-2.5 text-sm font-medium text-ink-950 transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-30 disabled:hover:scale-100"
-                  >
-                    {step === 5 ? 'Send My Brief' : 'Continue'}
-                    <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
-                  </button>
-                </div>
-              </div>
+                      {submissionMessage && !submitSuccess && (
+                        <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-300">
+                          {submissionMessage}
+                        </div>
+                      )}
 
-              <SummaryCard config={config} step={step} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+                      {/* Action buttons */}
+                      <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-ink-800">
+                        <button
+                          onClick={back}
+                          disabled={isSubmitting}
+                          className="flex items-center gap-2 rounded-full border border-ink-700 px-5 py-2.5 text-sm text-ink-300 transition-colors hover:border-ink-500 hover:text-ink-50 disabled:opacity-30"
+                        >
+                          <ArrowLeft size={16} /> Back to Contact
+                        </button>
+
+                        <button
+                          onClick={submitBrief}
+                          disabled={!isConfirmed || isSubmitting}
+                          className="group flex items-center gap-2 rounded-full bg-accent-400 px-7 py-3 text-sm font-medium text-ink-950 transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-30 disabled:hover:scale-100"
+                        >
+                          <Sparkles size={16} />
+                          {isSubmitting ? 'Submitting...' : 'Submit Brief'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key={step}
+                  initial={{ opacity: 0, x: 30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -30 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {step === 0 && (
+                    <StepGrid options={projectTypeOptions} selected={config.projectTypes} onToggle={toggleTypes} multi />
+                  )}
+                  {step === 1 && (
+                    <BusinessForm config={config} setConfig={setConfig} />
+                  )}
+                  {step === 2 && (
+                    <StepGrid options={goalOptions} selected={config.goals} onToggle={toggleGoals} multi />
+                  )}
+                  {step === 3 && (
+                    <>
+                      <p className="mb-6 text-sm text-ink-400">Select everything you think you might need.</p>
+                      <StepGrid options={featureOptions} selected={config.features} onToggle={toggleFeatures} multi />
+                    </>
+                  )}
+                  {step === 4 && (
+                    <StepGrid options={timelineOptions} selected={config.timeline ? [config.timeline] : []} onToggle={(v) => setConfig({ ...config, timeline: v })} />
+                  )}
+                  {step === 5 && (
+                    <ContactForm config={config} setConfig={setConfig} />
+                  )}
+
+                  {/* Nav buttons */}
+                  <div className="mt-10 flex items-center justify-between">
+                    <button
+                      onClick={back}
+                      disabled={step === 0}
+                      className="flex items-center gap-2 rounded-full border border-ink-700 px-5 py-2.5 text-sm text-ink-300 transition-colors hover:border-ink-500 hover:text-ink-50 disabled:opacity-30 disabled:hover:border-ink-700 disabled:hover:text-ink-300"
+                    >
+                      <ArrowLeft size={16} /> Back
+                    </button>
+                    <button
+                      onClick={next}
+                      disabled={!canProceed()}
+                      className="group flex items-center gap-2 rounded-full bg-accent-400 px-6 py-2.5 text-sm font-medium text-ink-950 transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-30 disabled:hover:scale-100"
+                    >
+                      {step === 5 ? 'Preview & Confirm' : 'Continue'}
+                      <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <SummaryCard config={config} step={isPreviewMode ? 6 : step} />
+        </div>
       </div>
     </section>
+  );
+}
+
+function PreviewSection({ title, content, onEdit }: { title: string; content: React.ReactNode; onEdit: () => void }) {
+  return (
+    <div className="flex items-start justify-between rounded-2xl border border-ink-800 bg-ink-900/40 p-4">
+      <div className="space-y-1">
+        <h4 className="text-xs font-mono uppercase tracking-wider text-accent-400">{title}</h4>
+        <div className="text-sm text-ink-200">{content}</div>
+      </div>
+      <button
+        onClick={onEdit}
+        className="flex items-center gap-1.5 rounded-lg border border-ink-700 px-3 py-1.5 text-xs text-ink-300 hover:border-accent-400 hover:text-accent-400 transition-colors"
+      >
+        <Edit3 size={13} /> Edit
+      </button>
+    </div>
   );
 }
 
@@ -328,92 +486,5 @@ function Input({ label, value, onChange, placeholder, required }: { label: strin
         className="w-full rounded-2xl border border-ink-800 bg-ink-900/30 px-4 py-3 text-sm text-ink-100 placeholder-ink-600 outline-none transition-colors focus:border-accent-400"
       />
     </div>
-  );
-}
-
-function FinalSummary({ config, isSubmitting, hasSubmitted, submissionMessage, onSubmit, onReset }: { config: ProjectConfig; isSubmitting: boolean; hasSubmitted: boolean; submissionMessage: string; onSubmit: () => Promise<void>; onReset: () => void }) {
-  const rows: { label: string; value: string }[] = [
-    { label: 'Project Type', value: config.projectTypes.join(', ') || 'Not specified' },
-    { label: 'Business', value: config.business.name || 'Not specified' },
-    { label: 'Industry', value: config.business.industry || 'Not specified' },
-    { label: 'Primary Goal', value: config.goals.join(', ') || 'Not specified' },
-    { label: 'Features', value: config.features.length > 0 ? `${config.features.length} selected` : 'None' },
-    { label: 'Growth', value: config.growth.join(', ') || 'None' },
-    { label: 'Experience', value: config.experience || 'Not specified' },
-    { label: 'Timeline', value: config.timeline || 'Not specified' },
-    { label: 'Budget', value: config.budget || 'Not specified' },
-  ];
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mx-auto max-w-2xl"
-    >
-      <div className="rounded-3xl border border-ink-800 bg-ink-900/40 p-8 text-center sm:p-12">
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2, type: 'spring' }}
-          className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent-400 text-ink-950"
-        >
-          <Check size={32} />
-        </motion.div>
-
-        <h3 className="mt-6 font-display text-4xl font-semibold text-ink-50">
-          {isSubmitting ? 'Sending your brief.' : hasSubmitted ? 'Got it.' : 'Review your brief.'}
-        </h3>
-        <p className="mt-3 text-ink-300">
-          {isSubmitting ? 'Sending your project details now.' : hasSubmitted ? 'Your project is being shaped around your requirements.' : 'Your details are ready to send.'}
-        </p>
-
-        <div className="mt-10 space-y-3 text-left">
-          {rows.map((row, i) => (
-            <motion.div
-              key={row.label}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 + i * 0.05 }}
-              className="flex items-center justify-between border-b border-ink-800 pb-3"
-            >
-              <span className="text-xs uppercase tracking-wide text-ink-500">{row.label}</span>
-              <span className="text-right text-sm text-ink-200">{row.value}</span>
-            </motion.div>
-          ))}
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-          className="mt-8 rounded-2xl border border-accent-400/20 bg-accent-400/5 p-6"
-        >
-          <span className="text-xs uppercase tracking-wide text-accent-400">Project brief</span>
-          <p className="mt-2 text-lg font-medium text-ink-50">Your requirements are ready for the next review step.</p>
-          <p className="mt-2 text-xs text-ink-500">We’ll reach out by phone or email to confirm the right next step.</p>
-        </motion.div>
-
-        <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-          <button
-            onClick={onSubmit}
-            disabled={isSubmitting || hasSubmitted}
-            className="group flex items-center gap-2 rounded-full bg-accent-400 px-7 py-3.5 font-medium text-ink-950 transition-transform hover:scale-[1.03] active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            <Sparkles size={18} />
-            {isSubmitting ? 'Sending...' : hasSubmitted ? 'Brief Sent' : 'Send My Brief'}
-          </button>
-          <button
-            onClick={onReset}
-            className="rounded-full border border-ink-700 px-7 py-3.5 text-sm text-ink-300 transition-colors hover:text-ink-50"
-          >
-            Start Over
-          </button>
-        </div>
-
-        {submissionMessage && (
-          <p className="mt-4 text-sm text-accent-300">{submissionMessage}</p>
-        )}
-      </div>
-    </motion.div>
   );
 }
